@@ -1,0 +1,6 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+body{font-family:Inter,system-ui,sans-serif;margin:0}
+.inp{@apply w-full bg-bg border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-zinc-500}
+.btn{@apply bg-white text-black rounded-lg px-3 py-2 text-sm font-medium hover:bg-zinc-200 transition}
+.btn2{@apply border border-line rounded-lg px-3 py-2 text-sm hover:bg-white/5 transition}
+.card{@apply bg-card border border-line rounded-xl p-4}
