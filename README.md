@@ -26,3 +26,17 @@ Sur iPhone : Safari → Partager → **Sur l'écran d'accueil**.
 
 ## Ce qui n'est PAS connecté (clés API nécessaires)
 YouTube API, Gmail (OAuth), Google Calendar : non actifs. Les statistiques YouTube se saisissent à la main.
+
+## Connexions Google (YouTube, Gmail, Drive, Calendar) — à faire UNE fois par l'administrateur
+1. Google Cloud Console → nouveau projet → **Bibliothèque** : active YouTube Data API v3, Gmail API, Google Drive API, Google Calendar API.
+2. **Écran de consentement OAuth** → Externe → ajoute les e-mails testeurs. (Gmail/Drive sont des permissions « sensibles » : pour des utilisateurs hors liste de test, Google impose une vérification de l'application.)
+3. **Identifiants → ID client OAuth → Application Web**. URI de redirection autorisé : `https://TON-PROJET.supabase.co/functions/v1/google`
+4. Supabase → SQL Editor → colle et lance `supabase/connections.sql`.
+5. Terminal, dans le dossier du projet :
+```
+npx supabase login
+npx supabase link --project-ref TON-PROJET
+npx supabase secrets set GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... APP_URL=https://ton-site.vercel.app
+npx supabase functions deploy google --no-verify-jwt
+```
+Ensuite chaque utilisateur connecte ses propres comptes depuis **Paramètres → Connexions** ou depuis les modules, sans rien configurer.

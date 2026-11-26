@@ -1,6 +1,8 @@
 import {useEffect,useState,useCallback,useRef} from 'react'
 import {supabase,configured} from './lib/supabase'
 import {MODS,Mod} from './modules'
+import YT from './YT'
+import {Conn,ConnBadge,GPanel,SVC_OF} from './Conn'
 type Rec={id:string;module:string;data:any;created_at:string;owner:string}
 const fmt=(d:string)=>new Date(d).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})
 const num=(v:any)=>Number(v)||0
@@ -68,14 +70,17 @@ function Module({m,uid}:{m:Mod;uid:string}){
  const {recs,load,err}=useRecs(m.key,uid),[edit,setEdit]=useState<Rec|null|'new'>(null),[q,setQ]=useState(''),[msg,setMsg]=useState('')
  const del=async(r:Rec)=>{if(!confirm('Supprimer ?'))return;const {error}=await supabase.from('records').delete().eq('id',r.id);if(error)setMsg(error.message);else{if(r.data.filePath)await supabase.storage.from('files').remove([r.data.filePath]);load()}}
  const toggle=async(r:Rec)=>{await supabase.from('records').update({data:{...r.data,done:!r.data.done}}).eq('id',r.id);load()}
- const list=recs.filter(r=>JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))
+ const list=recs.filter(r=>!r.data.ytId).filter(r=>JSON.stringify(r.data).toLowerCase().includes(q.toLowerCase()))
  const inc=recs.filter(r=>r.data.type==='revenu').reduce((a,r)=>a+num(r.data.amount),0),exp=recs.filter(r=>r.data.type==='dépense').reduce((a,r)=>a+num(r.data.amount),0)
  const cats:Record<string,number>={};if(m.flag==='finance')recs.forEach(r=>{const k=(r.data.cat||'Autre')+' ('+r.data.type+')';cats[k]=(cats[k]||0)+num(r.data.amount)})
  const csv=()=>{const rows=[['Date','Libellé','Type','Catégorie','Montant'],...recs.map(r=>[r.data.date,r.data.name,r.data.type,r.data.cat,r.data.amount])]
   const b=new Blob([rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='compta.csv';a.click()}
  if(edit)return <Form m={m} init={edit==='new'?undefined:edit} uid={uid} onDone={()=>{setEdit(null);load()}} onCancel={()=>setEdit(null)}/>
  return <div className="space-y-4">
+  {SVC_OF[m.key]&&<ConnBadge svc={SVC_OF[m.key]}/>}
+  {m.key!=="video"&&SVC_OF[m.key]&&<GPanel svc={SVC_OF[m.key]}/>}
   <div className="flex flex-wrap gap-2"><input className="inp max-w-xs" placeholder="Filtrer…" value={q} onChange={e=>setQ(e.target.value)}/><button className="btn" onClick={()=>setEdit('new')}>+ Ajouter</button>{m.flag==='finance'&&<button className="btn2" onClick={csv}>Export CSV</button>}</div>
+  {m.key==='video'&&<YT recs={recs} uid={uid} reload={load}/>}
   {m.flag==='timer'&&<Timer m={m} uid={uid} done={load}/>}
   {m.flag==='timer'&&<p className="text-mut text-sm">Total : {Math.round(recs.reduce((a,r)=>a+num(r.data.minutes),0)/6)/10} h</p>}
   {m.flag==='finance'&&<div className="grid grid-cols-3 gap-3">{[['Revenus',inc],['Dépenses',exp],['Bénéfice',inc-exp]].map(([l,v]:any)=><div key={l} className="card"><div className="text-mut text-xs">{l}</div><div className="text-xl">{v.toLocaleString('fr-FR')} €</div></div>)}</div>}
@@ -113,7 +118,7 @@ function Settings({uid,email,onInstall}:{uid:string;email:string;onInstall:(()=>
  useEffect(()=>{supabase.from('profiles').select('username').eq('id',uid).single().then(r=>setN(r.data?.username||''))},[])
  const save=async()=>{if(name.trim().length<2)return setMsg('Nom trop court.');const r=await supabase.from('profiles').upsert({id:uid,username:name.trim()});setMsg(r.error?r.error.message:'Profil enregistré ✔')}
  const chg=async()=>{if(pw.length<6)return setMsg('6 caractères minimum.');const r=await supabase.auth.updateUser({password:pw});setMsg(r.error?r.error.message:'Mot de passe changé ✔');setPw('')}
- return <div className="space-y-4 max-w-md"><div className="card space-y-2"><div className="text-mut text-sm">{email}</div><input className="inp" value={name} onChange={e=>setN(e.target.value)} placeholder="Nom d’utilisateur"/><button className="btn" onClick={save}>Enregistrer</button></div>
+ return <div className="space-y-4 max-w-2xl"><Conn/><div className="card space-y-2"><div className="text-mut text-sm">{email}</div><input className="inp" value={name} onChange={e=>setN(e.target.value)} placeholder="Nom d’utilisateur"/><button className="btn" onClick={save}>Enregistrer</button></div>
   <div className="card space-y-2"><input className="inp" type="password" placeholder="Nouveau mot de passe" value={pw} onChange={e=>setPw(e.target.value)}/><button className="btn" onClick={chg}>Changer le mot de passe</button></div>
   <div className="card space-y-2"><button className="btn2" onClick={()=>'Notification' in window&&Notification.requestPermission().then(p=>setMsg('Notifications : '+p))}>Activer les notifications</button>{onInstall&&<button className="btn2 ml-2" onClick={onInstall}>Installer NACORP OS</button>}</div>
   <div className="card text-sm text-mut">Connexions externes (YouTube API, Gmail, Google Calendar) : <b>non connectées</b>. Elles nécessitent des clés API à configurer plus tard (voir README).</div>
@@ -133,7 +138,7 @@ function Dashboard({uid,go}:{uid:string;go:(k:string)=>void}){
   <Box t="Activité récente" k="notes">{recs.slice(0,6).map(r=><div key={r.id} className="flex justify-between"><span className="truncate">{MODS.find(m=>m.key===r.module)?.label} · {r.data.name||r.data.subject||r.data.project}</span><span className="text-mut text-xs">{fmt(r.created_at)}</span></div>)}{!recs.length&&<p className="text-mut text-xs">Aucune activité.</p>}</Box></div></div>}
 
 export default function App(){
- const [session,setS]=useState<any>(undefined),[view,setV]=useState('dashboard'),[open,setOpen]=useState(window.innerWidth>768),[q,setQ]=useState(''),[prompt,setPrompt]=useState<any>(null),[uname,setUn]=useState('')
+ const [session,setS]=useState<any>(undefined),[view,setV]=useState(/connected|oauth_error/.test(location.search)?'settings':'dashboard'),[open,setOpen]=useState(window.innerWidth>768),[q,setQ]=useState(''),[prompt,setPrompt]=useState<any>(null),[uname,setUn]=useState('')
  useEffect(()=>{supabase.auth.getSession().then(r=>setS(r.data.session));const {data}=supabase.auth.onAuthStateChange((_e,s)=>setS(s));return()=>data.subscription.unsubscribe()},[])
  useEffect(()=>{const h=(e:any)=>{e.preventDefault();setPrompt(e)};window.addEventListener('beforeinstallprompt',h);return()=>window.removeEventListener('beforeinstallprompt',h)},[])
  useEffect(()=>{if(session)supabase.from('profiles').select('username').eq('id',session.user.id).single().then(r=>setUn(r.data?.username||session.user.email))},[session])
